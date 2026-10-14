@@ -12,7 +12,7 @@
 <div id="bar">
  <b>NHCSXH Si Ma Cai</b>
  <select id="xa"><option value="">Tất cả xã</option></select>
- <input id="q" placeholder="Tìm tên / thôn / CIF">
+ <input id="q" placeholder="Tìm tên / thôn / xã (không cần dấu)">
  <label><input type="checkbox" id="dgd" checked> Điểm giao dịch</label>
  <span id="cnt"></span> <button onclick="authed(true)">🔑 Đăng nhập cập nhật</button>
 </div>
@@ -30,10 +30,13 @@ async function authed(force) { // cập nhật: cần mã
   if ((await call('/api/auth')).ok) { load(); return true; }
   sessionStorage.key = ''; alert('Sai mã'); return false;
 }
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function load() {
-  const p = new URLSearchParams({xa: xa.value, q: q.value});
-  const data = await (await api('/api/to-truong?' + p)).json();
+  const p = new URLSearchParams({xa: xa.value});
+  const all = await (await api('/api/to-truong?' + p)).json();
+  const key = norm(q.value);
+  const data = key ? all.filter(r => norm([r.ten_to_truong, r.ten_thon, r.ten_xa, r.ten_dgd, r.ma_cif].join(' ')).includes(key)) : all;
   layer.clearLayers();
   const pts = [];
   for (const r of data) {
