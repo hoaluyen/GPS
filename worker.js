@@ -6,7 +6,9 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
-    if (!env.ACCESS_KEY || req.headers.get('x-update-key') !== env.ACCESS_KEY) return json({ error: 'Sai mã truy cập' }, 401);
+    const authed = !!env.ACCESS_KEY && req.headers.get('x-update-key') === env.ACCESS_KEY;
+    // Công khai: chỉ xem, ẩn mã CIF. Có mã: xem đầy đủ và cập nhật.
+    const pub = r => { if (authed) return r; const { ma_cif, vi_tri_dgd, ...rest } = r; return rest; };
 
     if (url.pathname === '/api/xa')
       return json((await env.DB.prepare('SELECT DISTINCT ten_xa FROM to_truong ORDER BY ten_xa').all()).results.map(r => r.ten_xa));
@@ -15,12 +17,15 @@ export default {
       const xa = url.searchParams.get('xa'), q = url.searchParams.get('q');
       let sql = 'SELECT * FROM to_truong WHERE lat IS NOT NULL'; const args = [];
       if (xa) { sql += ' AND ten_xa=?'; args.push(xa); }
-      if (q) { sql += ' AND (ten_to_truong LIKE ? OR ten_thon LIKE ? OR ma_cif LIKE ?)'; args.push(`%${q}%`, `%${q}%`, `%${q}%`); }
-      return json((await env.DB.prepare(sql).bind(...args).all()).results);
+      if (q) { sql += authed ? ' AND (ten_to_truong LIKE ? OR ten_thon LIKE ? OR ma_cif LIKE ?)' : ' AND (ten_to_truong LIKE ? OR ten_thon LIKE ?)'; args.push(`%${q}%`, `%${q}%`); if (authed) args.push(`%${q}%`); }
+      return json((await env.DB.prepare(sql).bind(...args).all()).results.map(pub));
     }
 
     const m = url.pathname.match(/^\/api\/to-truong\/(\d+)\/vi-tri$/);
+    if (url.pathname === '/api/auth') return authed ? json({ ok: true }) : json({ error: 'Sai mã truy cập' }, 401);
+
     if (m && req.method === 'PUT') {
+      if (!authed) return json({ error: 'Sai mã truy cập' }, 401);
       const { lat, lng } = await req.json().catch(() => ({}));
       if (!(lat >= 8 && lat <= 24 && lng >= 102 && lng <= 110)) return json({ error: 'Tọa độ nằm ngoài Việt Nam' }, 400);
       const text = toDms(lat, 'N', 'S') + ' ' + toDms(lng, 'E', 'W');

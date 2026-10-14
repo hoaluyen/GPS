@@ -15,4 +15,4 @@ Dữ liệu nguồn `Data/SIMACAI.xlsx` và `seed.sql` chứa thông tin cá nh�
 5. `npx wrangler secret put ACCESS_KEY` -> nhập mã truy cập bí mật
 6. `npx wrangler deploy` -> nhận địa chỉ `https://gps-simacai.<tài-khoản>.workers.dev`
 
-Mọi API đều yêu cầu mã `ACCESS_KEY` (trang sẽ hỏi khi mở). Không chạy lại bước 4 sau khi đã có cập nhật GPS vì nó xóa dữ liệu cũ.
+Ai cũng xem được bản đồ (mã CIF bị ẩn). Cập nhật vị trí và xem mã CIF cần mã `ACCESS_KEY` (nút "Đăng nhập cập nhật" trên trang).

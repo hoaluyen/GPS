@@ -14,7 +14,7 @@
  <select id="xa"><option value="">Tất cả xã</option></select>
  <input id="q" placeholder="Tìm tên / thôn / CIF">
  <label><input type="checkbox" id="dgd" checked> Điểm giao dịch</label>
- <span id="cnt"></span>
+ <span id="cnt"></span> <button onclick="authed(true)">🔑 Đăng nhập cập nhật</button>
 </div>
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -22,13 +22,13 @@
 const map = L.map('map').setView([16.2, 106], 6); // toàn Việt Nam
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
 const layer = L.layerGroup().addTo(map);
-async function api(url, opts = {}) {
-  for (let i = 0; i < 3; i++) {
-    const res = await fetch(url, {...opts, headers: {...opts.headers, 'x-update-key': sessionStorage.key || ''}});
-    if (res.status !== 401) return res;
-    sessionStorage.key = prompt('Nhập mã truy cập:') || '';
-  }
-  throw new Error('Sai mã truy cập');
+const call = (url, opts = {}) => fetch(url, {...opts, headers: {...opts.headers, 'x-update-key': sessionStorage.key || ''}});
+const api = call; // xem: công khai, không cần mã
+async function authed(force) { // cập nhật: cần mã
+  if (!force && sessionStorage.key && (await call('/api/auth')).ok) return true;
+  sessionStorage.key = prompt('Nhập mã cập nhật:') || '';
+  if ((await call('/api/auth')).ok) { load(); return true; }
+  sessionStorage.key = ''; alert('Sai mã'); return false;
 }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function load() {
@@ -38,7 +38,7 @@ async function load() {
   const pts = [];
   for (const r of data) {
     L.marker([r.lat, r.lng]).addTo(layer).bindPopup(
-      `<b>${esc(r.ten_to_truong)}</b><br>${esc(r.ten_thon)}, ${esc(r.ten_xa)}<br>ĐGD: ${esc(r.ten_dgd)}<br>ĐVUT: ${esc(r.dvut)}<br>CIF: ${esc(r.ma_cif)}<br>GPS: ${esc(r.vi_tri_to_truong)}<hr><button onclick="updateGps(${r.id})">📍 Lấy vị trí hiện tại của tôi</button><br><button onclick="pickOnMap(${r.id})">🖱️ Chọn vị trí trên bản đồ</button>`);
+      `<b>${esc(r.ten_to_truong)}</b><br>${esc(r.ten_thon)}, ${esc(r.ten_xa)}<br>ĐGD: ${esc(r.ten_dgd)}<br>ĐVUT: ${esc(r.dvut)}<br>${r.ma_cif ? 'CIF: ' + esc(r.ma_cif) + '<br>' : ''}GPS: ${esc(r.vi_tri_to_truong)}<hr><button onclick="updateGps(${r.id})">📍 Lấy vị trí hiện tại của tôi</button><br><button onclick="pickOnMap(${r.id})">🖱️ Chọn vị trí trên bản đồ</button>`);
     pts.push([r.lat, r.lng]);
     if (dgd.checked && r.dgd_lat) {
       L.circleMarker([r.dgd_lat, r.dgd_lng], {color:'#d00', radius:7}).addTo(layer)
@@ -49,6 +49,7 @@ async function load() {
   if (pts.length) map.fitBounds(pts, {padding: [40, 40], maxZoom: 14});
 }
 async function save(id, lat, lng) {
+  if (!(await authed())) return;
   const res = await api('/api/to-truong/' + id + '/vi-tri', {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({lat, lng})});
   const j = await res.json();
   if (!res.ok) return alert(j.error);

@@ -4,10 +4,13 @@ const db = new DatabaseSync(process.env.DB_PATH || 'gps.db');
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
-app.use('/api', (req, res, next) => (!process.env.UPDATE_KEY || req.get('x-update-key') === process.env.UPDATE_KEY) ? next() : res.status(401).json({ error: 'Sai mã truy cập' }));
+const authed = req => !process.env.UPDATE_KEY || req.get('x-update-key') === process.env.UPDATE_KEY;
+const pub = (req, r) => { if (authed(req)) return r; const { ma_cif, vi_tri_dgd, ...rest } = r; return rest; };
+app.get('/api/auth', (req, res) => authed(req) ? res.json({ ok: true }) : res.status(401).json({ error: 'Sai mã truy cập' }));
 const toDms = (v, p, n) => { const h = v >= 0 ? p : n; v = Math.abs(v); const d = Math.floor(v), m = Math.floor((v - d) * 60); return `${d}°${m}'${((v - d - m / 60) * 3600).toFixed(1)}"${h}`; };
 // Cập nhật vị trí tổ trưởng (đặt UPDATE_KEY để yêu cầu mã khi cập nhật)
 app.put('/api/to-truong/:id/vi-tri', (req, res) => {
+  if (!authed(req)) return res.status(401).json({ error: 'Sai mã truy cập' });
   const lat = +req.body.lat, lng = +req.body.lng;
   if (!(lat >= 8 && lat <= 24 && lng >= 102 && lng <= 110)) return res.status(400).json({ error: 'Tọa độ nằm ngoài Việt Nam' });
   const text = toDms(lat, 'N', 'S') + ' ' + toDms(lng, 'E', 'W');
@@ -20,8 +23,8 @@ app.get('/api/to-truong', (req, res) => {
   let sql = 'SELECT * FROM to_truong WHERE lat IS NOT NULL';
   const args = [];
   if (xa) { sql += ' AND ten_xa=?'; args.push(xa); }
-  if (q) { sql += ' AND (ten_to_truong LIKE ? OR ten_thon LIKE ? OR ma_cif LIKE ?)'; args.push(...Array(3).fill(`%${q}%`)); }
-  res.json(db.prepare(sql).all(...args));
+  if (q) { sql += ' AND (ten_to_truong LIKE ? OR ten_thon LIKE ?' + (authed(req) ? ' OR ma_cif LIKE ?' : '') + ')'; args.push(...Array(authed(req) ? 3 : 2).fill(`%${q}%`)); }
+  res.json(db.prepare(sql).all(...args).map(r => pub(req, r)));
 });
 app.get('/api/xa', (req, res) =>
   res.json(db.prepare('SELECT DISTINCT ten_xa FROM to_truong ORDER BY ten_xa').all().map(r => r.ten_xa)));
