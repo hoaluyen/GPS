@@ -1,0 +1,7 @@
+node_modules
+gps.db
+Data/
+seed.sql
+.env
+.wrangler/
+.dev.vars

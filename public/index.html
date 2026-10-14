@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bản đồ GPS Tổ trưởng - PGD Si Ma Cai</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+ html,body{height:100%;margin:0;font-family:system-ui,sans-serif}
+ #bar{position:absolute;z-index:1000;top:10px;left:50px;background:#fff;padding:8px 10px;border-radius:8px;box-shadow:0 2px 8px #0004;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ #map{height:100%}
+ input,select{padding:5px}
+</style></head><body>
+<div id="bar">
+ <b>NHCSXH Si Ma Cai</b>
+ <select id="xa"><option value="">Tất cả xã</option></select>
+ <input id="q" placeholder="Tìm tên / thôn / CIF">
+ <label><input type="checkbox" id="dgd" checked> Điểm giao dịch</label>
+ <span id="cnt"></span>
+</div>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([16.2, 106], 6); // toàn Việt Nam
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+const layer = L.layerGroup().addTo(map);
+async function api(url, opts = {}) {
+  for (let i = 0; i < 3; i++) {
+    const res = await fetch(url, {...opts, headers: {...opts.headers, 'x-update-key': sessionStorage.key || ''}});
+    if (res.status !== 401) return res;
+    sessionStorage.key = prompt('Nhập mã truy cập:') || '';
+  }
+  throw new Error('Sai mã truy cập');
+}
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function load() {
+  const p = new URLSearchParams({xa: xa.value, q: q.value});
+  const data = await (await api('/api/to-truong?' + p)).json();
+  layer.clearLayers();
+  const pts = [];
+  for (const r of data) {
+    L.marker([r.lat, r.lng]).addTo(layer).bindPopup(
+      `<b>${esc(r.ten_to_truong)}</b><br>${esc(r.ten_thon)}, ${esc(r.ten_xa)}<br>ĐGD: ${esc(r.ten_dgd)}<br>ĐVUT: ${esc(r.dvut)}<br>CIF: ${esc(r.ma_cif)}<br>GPS: ${esc(r.vi_tri_to_truong)}<hr><button onclick="updateGps(${r.id})">📍 Lấy vị trí hiện tại của tôi</button><br><button onclick="pickOnMap(${r.id})">🖱️ Chọn vị trí trên bản đồ</button>`);
+    pts.push([r.lat, r.lng]);
+    if (dgd.checked && r.dgd_lat) {
+      L.circleMarker([r.dgd_lat, r.dgd_lng], {color:'#d00', radius:7}).addTo(layer)
+        .bindPopup(`<b>Điểm giao dịch ${esc(r.ten_dgd)}</b><br>${esc(r.ten_xa)}`);
+    }
+  }
+  cnt.textContent = data.length + ' tổ trưởng';
+  if (pts.length) map.fitBounds(pts, {padding: [40, 40], maxZoom: 14});
+}
+async function save(id, lat, lng) {
+  const res = await api('/api/to-truong/' + id + '/vi-tri', {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({lat, lng})});
+  const j = await res.json();
+  if (!res.ok) return alert(j.error);
+  map.closePopup(); await load(); map.setView([lat, lng], 16);
+}
+function updateGps(id) {
+  if (!navigator.geolocation) return alert('Trình duyệt không hỗ trợ GPS');
+  navigator.geolocation.getCurrentPosition(
+    p => confirm('Lưu vị trí (' + p.coords.latitude.toFixed(5) + ', ' + p.coords.longitude.toFixed(5) + '), sai số ~' + Math.round(p.coords.accuracy) + 'm?') && save(id, p.coords.latitude, p.coords.longitude),
+    e => alert('Không lấy được GPS: ' + e.message), {enableHighAccuracy: true, timeout: 20000});
+}
+function pickOnMap(id) {
+  map.closePopup(); alert('Bấm vào vị trí mới trên bản đồ');
+  map.once('click', e => confirm('Lưu vị trí này?') && save(id, e.latlng.lat, e.latlng.lng));
+}
+api('/api/xa').then(r => r.json()).then(l => { l.forEach(x => xa.add(new Option(x, x))); });
+xa.onchange = dgd.onchange = load;
+let t; q.oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
+load();
+</script></body></html>
