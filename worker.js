@@ -10,6 +10,22 @@ export default {
     // Công khai: chỉ xem, ẩn mã CIF. Có mã: xem đầy đủ và cập nhật.
     const pub = r => { if (authed) return r; const { ma_cif, vi_tri_dgd, ...rest } = r; return rest; };
 
+    // Tải hộ ô bản đồ OSM (cho máy bị chặn kết nối trực tiếp tới OSM), có lưu đệm
+    const t = url.pathname.match(/^\/api\/tile\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/);
+    if (t) {
+      const [z, x, y] = t.slice(1).map(Number);
+      if (z < 5 || z > 19 || x >= 2 ** z || y >= 2 ** z) return json({ error: 'Bad tile' }, 400);
+      const key = new Request(`https://tiles.local/${z}/${x}/${y}.png`);
+      let res = await caches.default.match(key);
+      if (!res) {
+        const up = await fetch(`https://tile.openstreetmap.org/${z}/${x}/${y}.png`, { headers: { 'User-Agent': 'gps-simacai/1.0 (NHCSXH Si Ma Cai internal map)' } });
+        if (!up.ok) return new Response('Tile error', { status: 502 });
+        res = new Response(up.body, { headers: { 'content-type': 'image/png', 'cache-control': 'public, max-age=604800' } });
+        await caches.default.put(key, res.clone());
+      }
+      return res;
+    }
+
     if (url.pathname === '/api/xa')
       return json((await env.DB.prepare('SELECT DISTINCT ten_xa FROM to_truong ORDER BY ten_xa').all()).results.map(r => r.ten_xa));
 

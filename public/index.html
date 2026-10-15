@@ -108,9 +108,10 @@ const T = {maxZoom: 19, referrerPolicy: 'origin'};
 const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {...T, attribution: '© OpenStreetMap'});
 const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {...T, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO'});
 const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {...T, attribution: '© Esri'});
-L.control.layers({'Bản đồ (OSM)': osm, 'Bản đồ (CARTO)': carto, 'Vệ tinh': sat}).addTo(map);
+const proxy = L.tileLayer('/api/tile/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'});
+L.control.layers({'Bản đồ (OSM)': osm, 'Bản đồ (qua máy chủ)': proxy, 'Bản đồ (CARTO)': carto, 'Vệ tinh': sat}).addTo(map);
 // Máy bị chặn/giới hạn OSM: tự chuyển sang nguồn khác
-const chain = [osm, carto, sat]; let cur = 0, ok = 0, bad = 0;
+const chain = [osm, proxy, carto, sat]; let cur = 0, ok = 0, bad = 0;
 chain[0].addTo(map);
 map.on('layeradd', e => { const i = chain.indexOf(e.layer); if (i >= 0) { cur = i; ok = bad = 0; } });
 chain.forEach(l => { l.on('tileload', () => ok++); l.on('tileerror', () => {
