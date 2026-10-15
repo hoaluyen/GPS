@@ -129,8 +129,8 @@ async function authed(force) { // cập nhật: cần mã
   if ((await call('/api/auth')).ok) { load(); return true; }
   sessionStorage.key = ''; alert('Sai mã'); return false;
 }
-const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const COLORS = ['#4c3fd1','#e535c4','#7ac943','#d9232d','#1ed8a0','#e6b422','#1e88e5','#ff7a00','#8e44ad','#00897b','#6d4c41','#546e7a'];
 const fill = (sel, label, vals, keep) => {
   sel.length = 1; sel.options[0].text = label;
@@ -138,7 +138,7 @@ const fill = (sel, label, vals, keep) => {
   sel.value = vals.includes(keep) ? keep : '';
 };
 let groups = []; // {name, color, visible, rows, layer}
-const shortName = n => String(n ?? '').trim().split(/\s+/).slice(-1)[0];
+const shortName = n => String(n == null ? '' : n).trim().split(/\s+/).slice(-1)[0];
 function render() {
   layer.clearLayers();
   const pts = [];
@@ -186,7 +186,7 @@ async function load() {
   const old = new Map(groups.map(g => [g.name, g.visible]));
   const by = new Map();
   for (const r of data) { if (!by.has(r.ten_to_truong)) by.set(r.ten_to_truong, []); by.get(r.ten_to_truong).push(r); }
-  groups = [...by].map(([name, rows], i) => ({name, rows, color: COLORS[i % COLORS.length], visible: old.get(name) ?? true}));
+  groups = [...by].map(([name, rows], i) => ({name, rows, color: COLORS[i % COLORS.length], visible: (old.has(name) ? old.get(name) : true)}));
   lastPts = render();
   renderLegend();
   cnt.textContent = data.length + ' tổ trưởng';
@@ -240,7 +240,7 @@ async function thongKe() {
     const k = y + '-' + String(m).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
     labels.push(dd(k)); vals.push(byDay.get(k) || 0);
   } else for (const [k, v] of byDay) { labels.push(dd(k)); vals.push(v); }
-  chT?.destroy(); chD?.destroy();
+  if (chT) chT.destroy(); if (chD) chD.destroy();
   chT = new Chart(document.getElementById('chT'), {type: 'line', data: {labels, datasets: [{label: 'Số tổ trưởng ghim mới / ngày', data: vals, fill: true, tension: .35, borderColor: '#2f95dc', backgroundColor: '#2f95dc55'}]}, options: {scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}});
   chD = new Chart(document.getElementById('chD'), {type: 'bar', data: {labels: d.rows.map(r => r.ten || '(trống)'), datasets: [{label: 'Đã ghim', data: d.rows.map(r => r.da_ghim), backgroundColor: '#9ad0f5'}, {label: 'Chưa ghim', data: d.rows.map(r => r.tong - r.da_ghim), backgroundColor: '#ffb1c1'}]}, options: {indexAxis: 'y', scales: {x: {stacked: true, ticks: {precision: 0}}, y: {stacked: true}}}});
   tb.innerHTML = '<tr><th>STT</th><th>Đơn vị</th><th>Tổng</th><th>Đã ghim</th><th>Chưa ghim</th><th>Ghim trong kỳ</th><th>% hoàn thành</th></tr>' +
@@ -248,7 +248,7 @@ async function thongKe() {
 }
 function xuatExcel() {
   const lines = ['STT,Đơn vị,Tổng,Đã ghim,Chưa ghim,Ghim trong kỳ,% hoàn thành'].concat(lastRows.map((r, i) =>
-    [i + 1, '"' + String(r.ten ?? '').replace(/"/g, '""') + '"', r.tong, r.da_ghim, r.tong - r.da_ghim, r.trong_ky, pct(r)].join(',')));
+    [i + 1, '"' + String(r.ten == null ? '' : r.ten).replace(/"/g, '""') + '"', r.tong, r.da_ghim, r.tong - r.da_ghim, r.trong_ky, pct(r)].join(',')));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'}));
   a.download = 'bao-cao-ghim-toa-do.csv'; a.click();
