@@ -4,23 +4,68 @@
 <title>Bản đồ GPS Tổ trưởng - PGD Si Ma Cai</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
- html,body{height:100%;margin:0;font-family:system-ui,sans-serif}
- #bar{position:absolute;z-index:1000;top:10px;left:50px;background:#fff;padding:8px 10px;border-radius:8px;box-shadow:0 2px 8px #0004;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+ html,body{height:100%;margin:0;font-family:system-ui,sans-serif;font-size:14px;color:#222}
+ body{display:flex;flex-direction:column}
+ #tabs{border-bottom:1px solid #ddd;border-top:4px solid #198754;padding:0 16px;display:flex;gap:4px;background:#fff}
+ #tabs span{padding:10px 14px;border-bottom:2px solid #0d6efd;color:#0d6efd}
+ #main{flex:1;display:flex;gap:12px;padding:10px 12px;min-height:0;background:#f5f6f8}
+ #side{width:330px;flex:none;background:#fff;border:1px solid #ddd;border-radius:8px;display:flex;flex-direction:column;min-height:0}
+ #side h3{margin:0;padding:12px 14px;border-bottom:1px solid #ddd;font-size:16px}
+ #side .body{padding:12px 14px;display:flex;flex-direction:column;gap:8px;min-height:0;flex:1}
+ label.l{font-weight:600;margin-top:4px}
+ select,input[type=text]{padding:7px;border:1px solid #ccc;border-radius:5px;width:100%;box-sizing:border-box;font-size:14px}
+ .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0}
+ button{padding:7px 8px;border:1px solid #888;border-radius:5px;background:#fff;cursor:pointer;font-size:13px}
+ button.g{background:#198754;border-color:#198754;color:#fff}
+ button.b{background:#0d6efd;border-color:#0d6efd;color:#fff}
+ .row{display:flex;align-items:center;gap:8px;justify-content:space-between}
+ #legend{overflow:auto;flex:1;min-height:80px;border-top:1px solid #eee;padding-top:6px}
+ .it{display:flex;align-items:center;gap:6px;padding:4px 0}
+ .it .dot{width:10px;height:10px;border-radius:50%;flex:none}
+ .it .nm{flex:1;font-size:13px}
+ .it button{padding:3px 8px;font-size:12px}
+ #mapwrap{flex:1;position:relative;border:1px solid #ddd;border-radius:8px;overflow:hidden}
  #map{height:100%}
- input,select{padding:5px}
+ .star{font-size:22px;line-height:22px;text-shadow:0 0 2px #fff,0 0 3px #fff;text-align:center}
+ .lbl{background:#fff;border:0;box-shadow:0 1px 3px #0005;font-weight:600;padding:1px 5px}
+ .lbl::before{display:none}
+ @media(max-width:800px){#main{flex-direction:column;overflow:auto}#side{width:auto}#mapwrap{min-height:70vh;flex:none}}
+ @media print{#tabs,#side{display:none}#main{padding:0}#mapwrap{border:0}}
 </style></head><body>
-<div id="bar">
- <b>NHCSXH Si Ma Cai</b>
- <select id="xa"><option value="">Tất cả xã</option></select>
- <input id="q" placeholder="Tìm tên / thôn / xã (không cần dấu)">
- <label><input type="checkbox" id="dgd" checked> Điểm giao dịch</label>
- <span id="cnt"></span> <button onclick="authed(true)">🔑 Đăng nhập cập nhật</button>
+<div id="tabs"><span>🗺️ Bản đồ</span></div>
+<div id="main">
+ <div id="side">
+  <h3>🧭 Sơ đồ tổ trưởng - NHCSXH Si Ma Cai</h3>
+  <div class="body">
+   <label class="l" for="xa">Chọn xã</label>
+   <select id="xa"><option value="">Tất cả xã</option></select>
+   <label class="l" for="thon">Chọn thôn</label>
+   <select id="thon"><option value="">Tất cả thôn</option></select>
+   <input type="text" id="q" placeholder="Tìm tên / thôn / xã (không cần dấu)">
+   <label><input type="checkbox" id="dgd" checked> Điểm giao dịch</label>
+   <div class="btns">
+    <button class="g" onclick="load()">Tải dữ liệu</button>
+    <button class="b" onclick="authed(true)">🔑 Đăng nhập cập nhật</button>
+    <button onclick="print()">In sơ đồ</button>
+    <button onclick="fit()">Xem tất cả</button>
+   </div>
+   <div class="row"><b>Chú giải theo tổ trưởng</b> <span id="cnt"></span></div>
+   <div class="row">
+    <label><input type="checkbox" id="lbl" checked> Hiện nhãn tên</label>
+    <button onclick="toggleAll()">Ẩn/Hiện tất cả</button>
+   </div>
+   <div id="legend"></div>
+  </div>
+ </div>
+ <div id="mapwrap"><div id="map"></div></div>
 </div>
-<div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map('map').setView([16.2, 106], 6); // toàn Việt Nam
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+const NORTH = [[19.5, 102], [23.6, 108.2]]; // khu vực miền Bắc
+const map = L.map('map', {maxBounds: NORTH, maxBoundsViscosity: 1, minZoom: 7}).fitBounds(NORTH);
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, attribution: '© Esri'});
+L.control.layers({'Bản đồ': osm, 'Vệ tinh': sat}).addTo(map);
 const layer = L.layerGroup().addTo(map);
 const call = (url, opts = {}) => fetch(url, {...opts, headers: {...opts.headers, 'x-update-key': sessionStorage.key || ''}});
 const api = call; // xem: công khai, không cần mã
@@ -32,24 +77,66 @@ async function authed(force) { // cập nhật: cần mã
 }
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().trim();
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const COLORS = ['#4c3fd1','#e535c4','#7ac943','#d9232d','#1ed8a0','#e6b422','#1e88e5','#ff7a00','#8e44ad','#00897b','#6d4c41','#546e7a'];
+const fill = (sel, label, vals, keep) => {
+  sel.length = 1; sel.options[0].text = label;
+  [...new Set(vals.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'vi')).forEach(v => sel.add(new Option(v, v)));
+  sel.value = vals.includes(keep) ? keep : '';
+};
+let groups = []; // {name, color, visible, rows, layer}
+const shortName = n => String(n ?? '').trim().split(/\s+/).slice(-1)[0];
+function render() {
+  layer.clearLayers();
+  const pts = [];
+  for (const g of groups) {
+    g.layer = L.layerGroup();
+    for (const r of g.rows) {
+      const m = L.marker([r.lat, r.lng], {icon: L.divIcon({className: '', html: `<div class="star" style="color:${g.color}">★</div>`, iconSize: [24, 24], iconAnchor: [12, 12]})})
+        .bindPopup(`<b>${esc(r.ten_to_truong)}</b><br>${esc(r.ten_thon)}, ${esc(r.ten_xa)}<br>ĐGD: ${esc(r.ten_dgd)}<br>ĐVUT: ${esc(r.dvut)}<br>${r.ma_cif ? 'CIF: ' + esc(r.ma_cif) + '<br>' : ''}GPS: ${esc(r.vi_tri_to_truong)}<hr><button onclick="updateGps(${r.id})">📍 Lấy vị trí hiện tại của tôi</button><br><button onclick="pickOnMap(${r.id})">🖱️ Chọn vị trí trên bản đồ</button>`);
+      if (lbl.checked) m.bindTooltip(esc(shortName(r.ten_to_truong)) + ' (Tổ trưởng)', {permanent: true, direction: 'top', offset: [0, -10], className: 'lbl'});
+      m.addTo(g.layer);
+      if (dgd.checked && r.dgd_lat) {
+        L.circleMarker([r.dgd_lat, r.dgd_lng], {color: '#d00', radius: 7}).bindPopup(`<b>Điểm giao dịch ${esc(r.ten_dgd)}</b><br>${esc(r.ten_xa)}`).addTo(g.layer);
+      }
+      pts.push([r.lat, r.lng]);
+    }
+    if (g.visible) g.layer.addTo(layer);
+  }
+  return pts;
+}
+function renderLegend() {
+  legend.innerHTML = '';
+  groups.forEach((g, i) => {
+    const d = document.createElement('div'); d.className = 'it';
+    d.innerHTML = `<input type="checkbox" ${g.visible ? 'checked' : ''}><span class="dot" style="background:${g.color}"></span><span class="nm">${esc(g.name)} (${g.rows.length})</span><button>Ẩn/Hiện</button>`;
+    const flip = () => { g.visible = !g.visible; d.firstChild.checked = g.visible; g.visible ? g.layer.addTo(layer) : layer.removeLayer(g.layer); };
+    d.firstChild.onchange = flip; d.lastChild.onclick = flip;
+    d.querySelector('.nm').onclick = () => g.rows[0] && map.setView([g.rows[0].lat, g.rows[0].lng], 17);
+    d.querySelector('.nm').style.cursor = 'pointer';
+    legend.appendChild(d);
+  });
+}
+function toggleAll() {
+  const v = !groups.every(g => g.visible);
+  groups.forEach(g => g.visible = v); render(); renderLegend();
+}
+let lastPts = [];
+function fit() { if (lastPts.length) map.fitBounds(lastPts, {padding: [40, 40], maxZoom: 14}); }
 async function load() {
   const p = new URLSearchParams({xa: xa.value});
   const all = await (await api('/api/to-truong?' + p)).json();
+  fill(thon, 'Tất cả thôn', all.map(r => r.ten_thon), thon.value);
   const key = norm(q.value);
-  const data = key ? all.filter(r => norm([r.ten_to_truong, r.ten_thon, r.ten_xa, r.ten_dgd, r.ma_cif].join(' ')).includes(key)) : all;
-  layer.clearLayers();
-  const pts = [];
-  for (const r of data) {
-    L.marker([r.lat, r.lng]).addTo(layer).bindPopup(
-      `<b>${esc(r.ten_to_truong)}</b><br>${esc(r.ten_thon)}, ${esc(r.ten_xa)}<br>ĐGD: ${esc(r.ten_dgd)}<br>ĐVUT: ${esc(r.dvut)}<br>${r.ma_cif ? 'CIF: ' + esc(r.ma_cif) + '<br>' : ''}GPS: ${esc(r.vi_tri_to_truong)}<hr><button onclick="updateGps(${r.id})">📍 Lấy vị trí hiện tại của tôi</button><br><button onclick="pickOnMap(${r.id})">🖱️ Chọn vị trí trên bản đồ</button>`);
-    pts.push([r.lat, r.lng]);
-    if (dgd.checked && r.dgd_lat) {
-      L.circleMarker([r.dgd_lat, r.dgd_lng], {color:'#d00', radius:7}).addTo(layer)
-        .bindPopup(`<b>Điểm giao dịch ${esc(r.ten_dgd)}</b><br>${esc(r.ten_xa)}`);
-    }
-  }
+  const data = all.filter(r => (!thon.value || r.ten_thon === thon.value) &&
+    (!key || norm([r.ten_to_truong, r.ten_thon, r.ten_xa, r.ten_dgd, r.ma_cif].join(' ')).includes(key)));
+  const old = new Map(groups.map(g => [g.name, g.visible]));
+  const by = new Map();
+  for (const r of data) { if (!by.has(r.ten_to_truong)) by.set(r.ten_to_truong, []); by.get(r.ten_to_truong).push(r); }
+  groups = [...by].map(([name, rows], i) => ({name, rows, color: COLORS[i % COLORS.length], visible: old.get(name) ?? true}));
+  lastPts = render();
+  renderLegend();
   cnt.textContent = data.length + ' tổ trưởng';
-  if (pts.length) map.fitBounds(pts, {padding: [40, 40], maxZoom: 14});
+  fit();
 }
 async function save(id, lat, lng) {
   if (!(await authed())) return;
@@ -69,7 +156,9 @@ function pickOnMap(id) {
   map.once('click', e => confirm('Lưu vị trí này?') && save(id, e.latlng.lat, e.latlng.lng));
 }
 api('/api/xa').then(r => r.json()).then(l => { l.forEach(x => xa.add(new Option(x, x))); });
-xa.onchange = dgd.onchange = load;
+xa.onchange = () => { thon.value = ''; load(); };
+thon.onchange = dgd.onchange = load;
+lbl.onchange = () => { lastPts = render(); };
 let t; q.oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
 load();
 </script></body></html>
