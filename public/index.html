@@ -7,7 +7,24 @@
  html,body{height:100%;margin:0;font-family:system-ui,sans-serif;font-size:14px;color:#222}
  body{display:flex;flex-direction:column}
  #tabs{border-bottom:1px solid #ddd;border-top:4px solid #198754;padding:0 16px;display:flex;gap:4px;background:#fff}
- #tabs span{padding:10px 14px;border-bottom:2px solid #0d6efd;color:#0d6efd}
+ #tabs span{padding:10px 14px;cursor:pointer;color:#555;border-bottom:2px solid transparent}
+ #tabs span.on{border-bottom-color:#0d6efd;color:#0d6efd}
+ #bc{flex:1;overflow:auto;padding:12px;background:#f5f6f8;display:none}
+ .card{background:#fff;border:1px solid #ddd;border-radius:8px;margin-bottom:12px}
+ .card h4{margin:0;padding:12px 16px;border-bottom:1px solid #ddd;font-size:16px}
+ .card .in{padding:12px 16px}
+ .flt{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+ .flt>div{display:flex;flex-direction:column;gap:4px}
+ .kpis{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 0}
+ .kpi{border:1px solid #ddd;border-radius:6px;padding:10px 16px;min-width:130px;background:#fff}
+ .kpi small{color:#666}.kpi b{display:block;font-size:24px;margin-top:4px}
+ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+ .grid2 .card{margin:0}
+ table{width:100%;border-collapse:collapse}
+ th,td{padding:7px 10px;border-bottom:1px solid #eee;text-align:right}
+ th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
+ th{background:#f5f6f8}
+ @media(max-width:800px){.grid2{grid-template-columns:1fr}}
  #main{flex:1;display:flex;gap:12px;padding:10px 12px;min-height:0;background:#f5f6f8}
  #side{width:330px;flex:none;background:#fff;border:1px solid #ddd;border-radius:8px;display:flex;flex-direction:column;min-height:0}
  #side h3{margin:0;padding:12px 14px;border-bottom:1px solid #ddd;font-size:16px}
@@ -32,7 +49,7 @@
  @media(max-width:800px){#main{flex-direction:column;overflow:auto}#side{width:auto}#mapwrap{min-height:70vh;flex:none}}
  @media print{#tabs,#side{display:none}#main{padding:0}#mapwrap{border:0}}
 </style></head><body>
-<div id="tabs"><span>🗺️ Bản đồ</span></div>
+<div id="tabs"><span class="on" data-t="main">🗺️ Bản đồ</span><span data-t="bc">📊 Báo cáo thống kê</span></div>
 <div id="main">
  <div id="side">
   <h3>🧭 Sơ đồ tổ trưởng - NHCSXH Si Ma Cai</h3>
@@ -59,6 +76,29 @@
  </div>
  <div id="mapwrap"><div id="map"></div></div>
 </div>
+<div id="bc">
+ <div class="card"><h4>Báo cáo thống kê ghim tọa độ</h4><div class="in">
+  <div class="flt">
+   <div><label>Thời gian</label><span style="display:flex;gap:8px"><select id="bThang"></select><select id="bNam"></select></span></div>
+   <div style="min-width:200px"><label>Cấp/Đơn vị</label><select id="bXa"><option value="">Toàn PGD</option></select></div>
+   <div style="min-width:200px"><label>Phạm vi</label><select id="bPv"><option value="xa">Theo Xã</option><option value="thon">Theo Thôn</option><option value="dgd">Theo Điểm giao dịch</option></select></div>
+   <button class="b" onclick="thongKe()">Xem thống kê</button>
+   <button onclick="xuatExcel()">Xuất Excel</button>
+  </div>
+  <div class="kpis">
+   <div class="kpi"><small>Tổng tổ trưởng</small><b id="kTong">-</b></div>
+   <div class="kpi"><small>Đã ghim</small><b id="kDa">-</b></div>
+   <div class="kpi"><small>Chưa ghim</small><b id="kChua">-</b></div>
+   <div class="kpi"><small>% hoàn thành</small><b id="kPct">-</b></div>
+  </div>
+ </div></div>
+ <div class="grid2">
+  <div class="card"><h4>Tiến độ theo thời gian</h4><div class="in"><canvas id="chT" height="220"></canvas></div></div>
+  <div class="card"><h4>Phân bổ theo đơn vị</h4><div class="in"><canvas id="chD" height="220"></canvas></div></div>
+ </div>
+ <div class="card"><h4>Bảng chi tiết</h4><div class="in" style="overflow:auto"><table id="tb"></table></div></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const NORTH = [[19.5, 102], [23.6, 108.2]]; // khu vực miền Bắc
@@ -155,10 +195,48 @@ function pickOnMap(id) {
   map.closePopup(); alert('Bấm vào vị trí mới trên bản đồ');
   map.once('click', e => confirm('Lưu vị trí này?') && save(id, e.latlng.lat, e.latlng.lng));
 }
-api('/api/xa').then(r => r.json()).then(l => { l.forEach(x => xa.add(new Option(x, x))); });
+api('/api/xa').then(r => r.json()).then(l => { l.forEach(x => { xa.add(new Option(x, x)); bXa.add(new Option(x, x)); }); });
 xa.onchange = () => { thon.value = ''; load(); };
 thon.onchange = dgd.onchange = load;
 lbl.onchange = () => { lastPts = render(); };
 let t; q.oninput = () => { clearTimeout(t); t = setTimeout(load, 300); };
 load();
+document.querySelectorAll('#tabs span').forEach(t => t.onclick = () => {
+  document.querySelectorAll('#tabs span').forEach(x => x.classList.toggle('on', x === t));
+  main.style.display = t.dataset.t === 'main' ? 'flex' : 'none';
+  bc.style.display = t.dataset.t === 'bc' ? 'block' : 'none';
+  if (t.dataset.t === 'main') map.invalidateSize(); else thongKe();
+});
+bThang.add(new Option('Cả năm', 0)); for (let m = 1; m <= 12; m++) bThang.add(new Option('Tháng ' + m, m));
+const now = new Date(); for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) bNam.add(new Option(y, y));
+bThang.value = now.getMonth() + 1;
+let chT, chD, lastRows = [];
+const dd = k => k.slice(8) + '/' + k.slice(5, 7);
+const pct = r => (r.tong ? r.da_ghim * 100 / r.tong : 0).toFixed(1) + '%';
+async function thongKe() {
+  const p = new URLSearchParams({xa: bXa.value, pham_vi: bPv.value, thang: bThang.value, nam: bNam.value});
+  const d = await (await api('/api/thong-ke?' + p)).json();
+  lastRows = d.rows;
+  const tong = d.rows.reduce((a, r) => a + r.tong, 0), da = d.rows.reduce((a, r) => a + r.da_ghim, 0);
+  kTong.textContent = tong; kDa.textContent = da; kChua.textContent = tong - da;
+  kPct.textContent = (tong ? da * 100 / tong : 0).toFixed(1) + '%';
+  const byDay = new Map(d.ngay.map(x => [x.ngay, x.so])), labels = [], vals = [];
+  const y = +bNam.value, m = +bThang.value;
+  if (m) for (let t = new Date(y, m - 1, 1); t.getMonth() === m - 1; t.setDate(t.getDate() + 1)) {
+    const k = y + '-' + String(m).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+    labels.push(dd(k)); vals.push(byDay.get(k) || 0);
+  } else for (const [k, v] of byDay) { labels.push(dd(k)); vals.push(v); }
+  chT?.destroy(); chD?.destroy();
+  chT = new Chart(document.getElementById('chT'), {type: 'line', data: {labels, datasets: [{label: 'Số tổ trưởng ghim mới / ngày', data: vals, fill: true, tension: .35, borderColor: '#2f95dc', backgroundColor: '#2f95dc55'}]}, options: {scales: {y: {beginAtZero: true, ticks: {precision: 0}}}}});
+  chD = new Chart(document.getElementById('chD'), {type: 'bar', data: {labels: d.rows.map(r => r.ten || '(trống)'), datasets: [{label: 'Đã ghim', data: d.rows.map(r => r.da_ghim), backgroundColor: '#9ad0f5'}, {label: 'Chưa ghim', data: d.rows.map(r => r.tong - r.da_ghim), backgroundColor: '#ffb1c1'}]}, options: {indexAxis: 'y', scales: {x: {stacked: true, ticks: {precision: 0}}, y: {stacked: true}}}});
+  tb.innerHTML = '<tr><th>STT</th><th>Đơn vị</th><th>Tổng</th><th>Đã ghim</th><th>Chưa ghim</th><th>Ghim trong kỳ</th><th>% hoàn thành</th></tr>' +
+    d.rows.map((r, i) => '<tr><td>' + (i + 1) + '</td><td>' + esc(r.ten) + '</td><td>' + r.tong + '</td><td>' + r.da_ghim + '</td><td>' + (r.tong - r.da_ghim) + '</td><td>' + r.trong_ky + '</td><td>' + pct(r) + '</td></tr>').join('');
+}
+function xuatExcel() {
+  const lines = ['STT,Đơn vị,Tổng,Đã ghim,Chưa ghim,Ghim trong kỳ,% hoàn thành'].concat(lastRows.map((r, i) =>
+    [i + 1, '"' + String(r.ten ?? '').replace(/"/g, '""') + '"', r.tong, r.da_ghim, r.tong - r.da_ghim, r.trong_ky, pct(r)].join(',')));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\r\n')], {type: 'text/csv;charset=utf-8'}));
+  a.download = 'bao-cao-ghim-toa-do.csv'; a.click();
+}
 </script></body></html>

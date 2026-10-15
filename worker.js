@@ -21,6 +21,20 @@ export default {
       return json((await env.DB.prepare(sql).bind(...args).all()).results.map(pub));
     }
 
+    if (url.pathname === '/api/thong-ke') {
+      const xa = url.searchParams.get('xa'), thang = +url.searchParams.get('thang') || 0, nam = +url.searchParams.get('nam') || 0;
+      const col = { xa: 'ten_xa', thon: 'ten_thon', dgd: 'ten_dgd' }[url.searchParams.get('pham_vi')] || 'ten_xa';
+      const where = xa ? 'WHERE ten_xa=?' : 'WHERE 1=1', args = xa ? [xa] : [];
+      const pref = nam ? (thang ? `${nam}-${String(thang).padStart(2, '0')}` : `${nam}`) : '';
+      const rows = (await env.DB.prepare(
+        `SELECT ${col} ten, COUNT(*) tong, COALESCE(SUM(lat IS NOT NULL),0) da_ghim, COALESCE(SUM(ngay_ghim LIKE ?),0) trong_ky FROM to_truong ${where} GROUP BY ${col} ORDER BY ${col}`
+      ).bind(pref ? pref + '%' : '\0', ...args).all()).results;
+      const ngay = (await env.DB.prepare(
+        `SELECT substr(ngay_ghim,1,10) ngay, COUNT(*) so FROM to_truong ${where} AND ngay_ghim LIKE ? GROUP BY 1 ORDER BY 1`
+      ).bind(...args, (pref || '') + '%').all()).results;
+      return json({ rows, ngay });
+    }
+
     const m = url.pathname.match(/^\/api\/to-truong\/(\d+)\/vi-tri$/);
     if (url.pathname === '/api/auth') return authed ? json({ ok: true }) : json({ error: 'Sai mã truy cập' }, 401);
 
@@ -29,7 +43,7 @@ export default {
       const { lat, lng } = await req.json().catch(() => ({}));
       if (!(lat >= 8 && lat <= 24 && lng >= 102 && lng <= 110)) return json({ error: 'Tọa độ nằm ngoài Việt Nam' }, 400);
       const text = toDms(lat, 'N', 'S') + ' ' + toDms(lng, 'E', 'W');
-      const r = await env.DB.prepare('UPDATE to_truong SET lat=?,lng=?,vi_tri_to_truong=? WHERE id=?').bind(lat, lng, text, m[1]).run();
+      const r = await env.DB.prepare("UPDATE to_truong SET lat=?,lng=?,vi_tri_to_truong=?,ngay_ghim=datetime('now','+7 hours') WHERE id=?").bind(lat, lng, text, m[1]).run();
       return r.meta.changes ? json({ ok: true, lat, lng, vi_tri_to_truong: text }) : json({ error: 'Không tìm thấy' }, 404);
     }
     return json({ error: 'Not found' }, 404);
