@@ -46,6 +46,7 @@
  .star{font-size:22px;line-height:22px;text-shadow:0 0 2px #fff,0 0 3px #fff;text-align:center}
  .lbl{background:#fff;border:0;box-shadow:0 1px 3px #0005;font-weight:600;padding:1px 5px}
  .lbl::before{display:none}
+ .far .lbl{display:none}
  @media(max-width:800px){#main{flex-direction:column;overflow:auto}#side{width:auto}#mapwrap{min-height:70vh;flex:none}}
  @media print{#tabs,#side{display:none}#main{padding:0}#mapwrap{border:0}}
 </style></head><body>
@@ -103,10 +104,22 @@
 <script>
 const NORTH = [[19.5, 102], [23.6, 108.2]]; // khu vực miền Bắc
 const map = L.map('map', {maxBounds: NORTH, maxBoundsViscosity: 1, minZoom: 7}).fitBounds(NORTH);
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
-const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, attribution: '© Esri'});
-L.control.layers({'Bản đồ': osm, 'Vệ tinh': sat}).addTo(map);
+const T = {maxZoom: 19, referrerPolicy: 'origin'};
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {...T, attribution: '© OpenStreetMap'});
+const carto = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png', {...T, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO'});
+const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {...T, attribution: '© Esri'});
+L.control.layers({'Bản đồ (OSM)': osm, 'Bản đồ (CARTO)': carto, 'Vệ tinh': sat}).addTo(map);
+// Máy bị chặn/giới hạn OSM: tự chuyển sang nguồn khác
+const chain = [osm, carto, sat]; let cur = 0, ok = 0, bad = 0;
+chain[0].addTo(map);
+map.on('layeradd', e => { const i = chain.indexOf(e.layer); if (i >= 0) { cur = i; ok = bad = 0; } });
+chain.forEach(l => { l.on('tileload', () => ok++); l.on('tileerror', () => {
+  if (++bad >= 4 && !ok && cur < chain.length - 1 && map.hasLayer(chain[cur])) { map.removeLayer(chain[cur]); chain[cur + 1].addTo(map); }
+}); });
 const layer = L.layerGroup().addTo(map);
+const LBL_ZOOM = 14; // zoom xa hơn thì ẩn nhãn cho đỡ rối
+const syncLbl = () => map.getContainer().classList.toggle('far', map.getZoom() < LBL_ZOOM);
+map.on('zoomend', syncLbl); syncLbl();
 const call = (url, opts = {}) => fetch(url, {...opts, headers: {...opts.headers, 'x-update-key': sessionStorage.key || ''}});
 const api = call; // xem: công khai, không cần mã
 async function authed(force) { // cập nhật: cần mã
